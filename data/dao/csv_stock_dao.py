@@ -1,6 +1,7 @@
 import os
-from data.stock_dao import IDataDao
+
 from config import config
+from data.dao.stock_dao import IDataDao
 
 
 class CsvStockDao(IDataDao):

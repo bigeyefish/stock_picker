@@ -1,59 +1,37 @@
-import tushare as ts
-import pandas as pd
 from pandas import DataFrame
-import datetime
+import pandas as pd
 import time
 from util.const import Const
 from util.redis_conn import redisUtil
-from config.config import configs
+from data.fetcher import fetch
 
 
 class Process:
-    def __init__(self) -> None:
-        self.start_date = (datetime.date.today() - datetime.timedelta(days=configs['init_stock_days'])).strftime(
-            '%Y%m%d')
-        ts.set_token('e9002771412a9735ddc9d24529386ef4e2b9c4adf80751cd60c27829')
-        self.pro = ts.pro_api()
-        self.sh_index = None
 
     def run(self, stock_dao):
-
+        stock_last_update = redisUtil.r.zrange(Const.KEY_STOCK_UPDATE.value, 0, -1, withscores=True)
+        stock_update_dict = dict(stock_last_update)
+        # 判断数据是否需要更新
         # 查询沪深所有股票
-        stock_list = self.pro.stock_basic(list_status='L')
+        stock_list = fetch.get_stock_list()
         for ts_code in stock_list['ts_code']:
-            last_update = redisUtil.r.zscore(Const.KEY_STOCK_UPDATE.value, ts_code)
-            if not last_update:
-                result = self.__get_multi_data(ts_code)
+            print(ts_code)
+            if ts_code not in stock_update_dict:
+                result = fetch.get_multi_data(ts_code)
                 if result is not None:
                     stock_dao.save(ts_code, result)
-                    redisUtil.r.zadd(Const.KEY_STOCK_UPDATE.value, {ts_code: int(self.start_date)})
+                    redisUtil.r.zadd(Const.KEY_STOCK_UPDATE.value, {ts_code: int(result.iloc[[0]].index[0])})
+                else:
+                    print('there is no data of code %s' % ts_code)
                 time.sleep(0.1)
 
-    def __get_multi_data(self, ts_code):
-        print('get stock [%s] data since %s' % (ts_code, self.start_date))
-        try:
-            # 获取大盘数据
-            if self.sh_index is None:
-                self.sh_index = self.pro.index_daily(ts_code='000001.SH', start_date=self.start_date,
-                                                     end_date='').set_index('trade_date')
 
-            # 获取股票历史行情
-            histo_record = ts.pro_bar(ts_code, pro_api=self.pro, start_date=self.start_date, end_date='',
-                                      ma=[5, 10, 20], adj='qfq')
-            # 计算量比
-            histo_record = histo_record.assign(
-                volume_ratio=histo_record['vol'].div(histo_record[::-1]['vol'].rolling(5).mean().shift(1)))
-            # 计算振幅
-            histo_record['amplitude'] = (histo_record['high'] - histo_record['low']).div(
-                histo_record['pre_close']) * 100
-            # 叠加大盘
-            histo_record['sz_pct_change'] = self.sh_index['pct_chg']
-            return histo_record
 
         # try:
         #         last_ten = histo_record.head(10)
         #         last_five = histo_record.head(5)
-        #         # 缩量、小振幅、多头 数量 、连续缩量下跌
+        #         # 缩量、小振幅、多头 数量 、连续缩量下跌git status
+
         #         less_volume = last_ten[
         #             (last_ten['volume_ratio'] < 1) | (last_ten['sz_pct_change'] > 2) | (last_ten['sz_pct_change'] < -2)]
         #         less_amplitude = last_ten[(last_ten['amplitude'] < 3)]
@@ -77,6 +55,4 @@ class Process:
         #         if test_count and len(result) == test_count:
         #             break;
         #
-        except Exception as e:
-            print(e)
-            return None
+
