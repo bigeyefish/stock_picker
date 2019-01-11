@@ -21,14 +21,7 @@ class Fetch:
                                                      end_date='').set_index('trade_date')
 
             # 获取股票历史行情
-            histo_record = ts.pro_bar(ts_code=ts_code, pro_api=self.pro, start_date=self.start_date, end_date='',
-                                      ma=[5, 10, 20], adj='qfq', factors=['tor', 'vr'])
-            # 计算量比
-            histo_record = histo_record.assign(
-                volume_ratio=histo_record['vol'].div(histo_record[::-1]['vol'].rolling(5).mean().shift(1)))
-            # 计算振幅
-            histo_record['amplitude'] = (histo_record['high'] - histo_record['low']).div(
-                histo_record['pre_close']) * 100
+            histo_record = ts.pro_bar(ts_code=ts_code, pro_api=self.pro, start_date=self.start_date, adj='qfq', factors=['tor', 'vr'])
             # 叠加大盘
             histo_record['sz_pct_change'] = self.sh_index['pct_chg']
             return histo_record

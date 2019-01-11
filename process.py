@@ -1,6 +1,9 @@
 from pandas import DataFrame
 import pandas as pd
 import time
+
+from calculator.indicator.amplitude import amplitude_calculator
+from calculator.indicator.market_pct import market_pct_calculator
 from util.const import Const
 from util.redis_conn import redisUtil
 from data.fetcher import fetch
@@ -18,13 +21,18 @@ class Process:
             print(ts_code)
             if ts_code not in stock_update_dict:
                 result = fetch.get_multi_data(ts_code)
+                # 叠加指标
+                result = amplitude_calculator.calc(result)
+                result = market_pct_calculator.calc(result, market=ts_code.split('.')[1])
+
                 if result is not None:
-                    stock_dao.save(ts_code, result)
-                    redisUtil.r.zadd(Const.KEY_STOCK_UPDATE.value, {ts_code: int(result.iloc[[0]].index[0])})
+                    stock_dao.save(ts_code, result.sort_index())
+                    # redisUtil.r.zadd(Const.KEY_STOCK_UPDATE.value, {ts_code: int(result.iloc[[0]].index[0])})
                 else:
                     print('there is no data of code %s' % ts_code)
                 time.sleep(0.1)
 
+            break
 
 
         # try:
